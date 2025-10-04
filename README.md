@@ -16,10 +16,10 @@ A versatile Telegram bot that combines AI chat, image generation, and music crea
 - Supports detailed text-to-image prompts
 - Returns JPEG images directly in chat
 
-### 🎶 Unique Music Creation
-- **Facebook's MusicGen-small** model
-- Generate original music from text descriptions
-- Outputs as downloadable WAV files
+### 🗨️ Text Summarization
+- **Falconsai's text_summarization** model
+- Convert lengthy texts to insightful notes
+- Insightful and bite-sized
 
 ### ⚡ Quick Access
 - Interactive buttons for all features
