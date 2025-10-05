@@ -1,6 +1,6 @@
 # 🤖 Sayargyi Bot - AI-Powered Telegram Assistant
 
-![Bot Demo](https://via.placeholder.com/800x400?text=Sayargyi+Bot+Demo) <!-- Replace with actual demo image -->
+<img width="1600" height="863" alt="demo" src="https://github.com/user-attachments/assets/990cff21-d0b3-4260-ac2b-619c872b2015" />
 
 A versatile Telegram bot that combines AI chat, image generation, and music creation powered by cutting-edge Hugging Face models.
 
