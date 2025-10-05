@@ -7,12 +7,15 @@ import io
 import ssl
 from requests.adapters import HTTPAdapter
 from urllib3.poolmanager import PoolManager
+from huggingface_hub import InferenceClient
 import time
+import os
+import random
 
 state = 0
 
 # Initialize the Telegram bot
-bot = telebot.TeleBot('Your telegram bot token')
+bot = telebot.TeleBot('8066998361:AAFxn8okbnM6DnM_tD3JsahBA9ymH7N5ES4')
 
 
 # Create an SSL context and set the SSL/TLS version
@@ -43,10 +46,10 @@ session.mount('https://', adapter)
 # Monkey-patch the requests library used by telebot
 import telebot.apihelper
 
-telebot.apihelper.SESSION = session
+telebot.apihelper.SESSION = session  # type: ignore
 
 # Define your bot API URL
-url = "https://api.telegram.org/bot<Your telegram bot token>/getMe"
+url = "https://api.telegram.org/bot8066998361:AAFxn8okbnM6DnM_tD3JsahBA9ymH7N5ES4/getMe"
 
 # Send the request using the session with the custom adapter and SSL context
 response = session.get(url)
@@ -61,34 +64,15 @@ headers = {"Authorization": f"Bearer {HF_API_KEY}"}
 API_URL2 = "https://api-inference.huggingface.co/models/facebook/musicgen-small"
 headers2 = {"Authorization": f"Bearer {HF_API_KEY}"}
 
+client = OpenAI(
+    base_url="https://router.huggingface.co/v1",
+    api_key=HF_API_KEY,
+)
 
-def query_musicgen(prompt):
-    response = requests.post(API_URL2,
-                             headers=headers2,
-                             json={"inputs": prompt})
-    if response.status_code == 200:
-        return response.content  # Return the raw audio bytes
-    else:
-        raise Exception(f"Error {response.status_code}: {response.json()}")
-
-
-def query_image(payload):
-    try:
-        response = requests.post(API_URL,
-                                 headers=headers,
-                                 json=payload,
-                                 timeout=500)
-        response.raise_for_status()  # Raise an exception for HTTP errors
-        return Image.open(io.BytesIO(response.content))
-    except requests.exceptions.RequestException as e:
-        raise Exception(f"Request error: {e}")
-    except Exception as e:
-        raise Exception(f"Image processing error: {e}")
-
-
-# Initialize the OpenAI client with Hugging Face's Inference API
-client = OpenAI(base_url="https://api-inference.huggingface.co/v1/",
-                api_key=HF_API_KEY)
+client2 = InferenceClient(
+    provider="hf-inference",
+    api_key=HF_API_KEY,
+)
 
 
 @bot.message_handler(commands=['option'])
@@ -96,8 +80,9 @@ def option(message):
     markup = types.InlineKeyboardMarkup()
     chat_button = types.InlineKeyboardButton("Chat", callback_data="chat")
     image_button = types.InlineKeyboardButton("Image", callback_data="image")
-    music_button = types.InlineKeyboardButton("Music", callback_data="music")
-    markup.add(chat_button, image_button, music_button)
+    summarize_button = types.InlineKeyboardButton("Summarize",
+                                                  callback_data="summarize")
+    markup.add(chat_button, image_button, summarize_button)
     bot.send_message(chat_id=message.chat.id,
                      text="Choose an option:",
                      reply_markup=markup)
@@ -109,8 +94,8 @@ def handle_user_choice(call):
         chat(call.message)
     elif call.data == "image":
         image(call.message)
-    elif call.data == "music":
-        music(call.message)
+    elif call.data == "summarize":
+        summarize(call.message)
 
 
 @bot.message_handler(commands=['chat'])
@@ -128,7 +113,7 @@ def image(message):
     global state
     bot.reply_to(
         message,
-        "You can now generate image with this bot. Type your message and press enter to send it"
+        "You can now generate an image with this bot. Type your message and press enter to send it"
     )
     state = 2
 
@@ -142,19 +127,19 @@ def stop(message):
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    globalfrome
+    global state
     bot.reply_to(
         message,
-        "🎉 Welcome to Sayargyi Bot! 🎉\n\nHi there! 👋 I'm your personal assistant, here to make your experience fun and creative. 🤖✨\n\nYou can:\n\n🗨️ Chat with me anytime you want!\n🎨 Generate Images to bring your ideas to life!\n🎶 Generate Music to add some rhythm to your day! 🎧🎶\nJust choose what you'd like to do, and let's get started! 🚀"
+        "🎉 Welcome to Sayargyi Bot! 🎉\n\nHi there! 👋 I'm your personal assistant, here to make your experience fun and creative. 🤖✨\n\nYou can:\n\n🗨️ Chat with me anytime you want!\n🎨 Generate Images to bring your ideas to life!\n Summarize lengthy texts to insightful notes \nJust choose what you'd like to do, and let's get started! 🚀"
     )
 
     # Create custom keyboard with shortcut buttons
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     chat_btn = types.KeyboardButton('💬 Chat')
     image_btn = types.KeyboardButton('🖼️ Image')
-    music_btn = types.KeyboardButton('🎵 Music')
+    summarize_btn = types.KeyboardButton(' summarize')
     help_btn = types.KeyboardButton('❓ Help')
-    markup.add(chat_btn, image_btn, music_btn, help_btn)
+    markup.add(chat_btn, image_btn, summarize_btn, help_btn)
 
     bot.send_message(chat_id=message.chat.id,
                      text="Use these shortcuts for quick access:",
@@ -163,12 +148,12 @@ def start(message):
     option(message)
 
 
-@bot.message_handler(commands=['music'])
-def music(message):
+@bot.message_handler(commands=['summarize'])
+def summarize(message):
     global state
     bot.reply_to(
         message,
-        "You can now generate music with this bot. Type your message and press enter to send it"
+        "You can now summarize texts with this bot. Type your message and press enter to send it"
     )
     state = 3
 
@@ -178,15 +163,31 @@ def handle_message(message):
     global state
     if state == 1:
         messages = [{"role": "user", "content": message.text}]
+
         try:
+
             completion = client.chat.completions.create(
-                model="Qwen/Qwen2.5-Coder-32B-Instruct",
-                messages=messages,
+                model="deepseek-ai/DeepSeek-V3.2-Exp:novita",
+                messages=messages,  # type: ignore
                 max_tokens=500)
-            response = completion.choices[0].message.content
-            bot.reply_to(message, response)
+
+            # Check if choices exist and are not empty
+            if hasattr(completion, 'choices') and completion.choices:
+                print(f"Number of choices: {len(completion.choices)}")
+
+                response = completion.choices[0].message
+
+                bot.reply_to(
+                    message, response.content if hasattr(response, 'content')
+                    and response.content else "No response generated")
+            else:
+
+                bot.reply_to(message, "No response generated from the model")
+
         except Exception as e:
-            bot.reply_to(message, f"An error occurred: {e}")
+
+            bot.reply_to(message,
+                         f"An error occurred: {type(e).__name__}: {str(e)}")
     elif state == 2:
         prompt = message.text
         bot.send_message(chat_id=message.chat.id, text="I am thinking....")
@@ -204,26 +205,46 @@ def handle_message(message):
             bot.send_message(chat_id=message.chat.id,
                              text=f"An error occurred: {e}")
     elif state == 3:
+
         prompt = message.text
         bot.send_message(chat_id=message.chat.id, text="I am thinking....")
         bot.send_message(chat_id=message.chat.id,
                          text="and DON'T TOUCH ANYTHING")
+
         try:
-            audio_bytes = query_musicgen(prompt)
-            audio_path = "./generated_music.wav"
-            with open(audio_path, "wb") as audio_file:
-                audio_file.write(audio_bytes)
-            with open(audio_path, "rb") as audio_file:
-                bot.send_audio(chat_id=message.chat.id,
-                               audio=audio_file,
-                               caption=message.text)
+            result = client2.summarization(
+                message.text,
+                model="Falconsai/text_summarization",
+            )
+
+            # Extract summary text properly
+            summary_text = None
+
+            if hasattr(result, 'summary_text'):
+                summary_text = result.summary_text
+            elif isinstance(result, dict) and 'summary_text' in result:
+                summary_text = result['summary_text']
+            elif isinstance(result, list) and len(result) > 0:
+                first_item = result[0]
+                if hasattr(first_item, 'summary_text'):
+                    summary_text = first_item.summary_text
+                elif isinstance(first_item,
+                                dict) and 'summary_text' in first_item:
+                    summary_text = first_item['summary_text']
+
+            if summary_text and summary_text.strip():
+                bot.reply_to(message, summary_text)
+            else:
+                bot.reply_to(message, "No summary generated or empty response")
+
         except Exception as e:
             bot.send_message(chat_id=message.chat.id,
                              text=f"An error occurred: {e}")
+
     else:
         bot.reply_to(
             message,
-            "Invalid command. Please use /chat, /image, /music, or /option to observe the commands"
+            "Invalid command. Please use /chat, /image, /summarize, or /option to observe the commands"
         )
 
 
