@@ -75,6 +75,20 @@ client2 = InferenceClient(
 )
 
 
+def query_image(payload):
+    try:
+        response = requests.post(API_URL,
+                                 headers=headers,
+                                 json=payload,
+                                 timeout=500)
+        response.raise_for_status()  # Raise an exception for HTTP errors
+        return Image.open(io.BytesIO(response.content))
+    except requests.exceptions.RequestException as e:
+        raise Exception(f"Request error: {e}")
+    except Exception as e:
+        raise Exception(f"Image processing error: {e}")
+
+
 @bot.message_handler(commands=['option'])
 def option(message):
     markup = types.InlineKeyboardMarkup()
